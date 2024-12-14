@@ -3,7 +3,12 @@
 #include <cstdint>
 #include <algorithm>
 #include <iomanip>
+#include <thread>
 
+int min(int a, int b)
+{
+    return (a < b) ? a : b;
+}
 
 std::vector<std::vector<double>> read_matrix() {
     size_t rows, cols;
@@ -43,27 +48,56 @@ std::vector<std::vector<double>> read_matrix() {
     return result;
 }
 
+std::vector<std::vector<double>> left, right, result;
+size_t left_rows, left_cols, right_cols;
+
+void work(int l, int r)
+{
+    for (int i = l; i <= r && i < left_rows; i++)
+        for (int k = 0; k < left_cols; ++k)
+            for (int j = 0; j < right_cols; ++j)
+                result[i][j] += left[i][k] * right[k][j];
+}
 
 int main() {
-    auto left = read_matrix();
-    auto right = read_matrix();
-    auto left_rows = left.size();
-    auto left_cols = left[0].size();
-    auto right_cols = right[0].size();
+    left = read_matrix();
+    right = read_matrix();
+    left_rows = left.size();
+    left_cols = left[0].size();
+    right_cols = right[0].size();
 
     if (left.empty() || right.empty() || left[0].size() != right.size()) {
         std::cerr << "Wrong matrices";
         return 1;
     }
 
-    std::vector<std::vector<double>> result(left_rows, std::vector<double>(right_cols));
-    for (int i = 0; i < left_rows; ++i) {
-        for (int j = 0; j < right_cols; ++j) {
-            for (int k = 0; k < left_cols; ++k) {
-                result[i][j] += left[i][k] * right[k][j];
-            }
+    result = std::vector<std::vector<double>>(left_rows, std::vector<double>(right_cols, 0));
+    int chunk_size = left_rows / 16;
+    int remainder = left_rows % 16;
+    int lll = 0;
+    int l[16], r[16];
+    for (int i = 0; i < 16; i++)
+    {
+        int extra = (i < remainder) ? 1 : 0; // Assign extra work to the first few threads
+
+        if (lll > left_rows) // Not enough work for all threads
+            l[i] = r[i] = -1;
+        else
+        {
+            l[i] = lll;
+            r[i] = min(lll + chunk_size - 1 + extra, left_rows);
         }
+        lll += chunk_size;
+        if (i < remainder)
+            lll++;
     }
+
+    std::thread threads[16];
+    for (int i = 0; i < 16; i++)
+        threads[i] = std::thread(work, l[i], r[i]);
+
+    for (int i = 0; i < 16; i++)
+        threads[i].join();
 
     std::cout << left_rows << ' ' << right_cols << "\n";
     for (int i = 0; i < left_rows; ++i) {
